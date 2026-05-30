@@ -1,0 +1,8 @@
+loguru
+MetaTrader5
+pandas
+psutil
+pydantic
+pydantic-settings
+python-telegram-bot
+pytest
