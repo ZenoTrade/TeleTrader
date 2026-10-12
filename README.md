@@ -133,6 +133,12 @@ SIGNAL_SOURCE=zeno                   # poll Zeno Signals instead of SIGNAL_CHAT_
 
 ---
 
+### Customer release
+
+`release/build_release.py` builds `ZenoCopier.exe`, `ZenoAdmin.exe` and `ZenoSetup.exe` with PyInstaller and zips them with a customer quick start. Pushing a `v*` tag runs it on GitHub's Windows runner (`.github/workflows/release.yml`), using the `ZENO_LICENSE_PUBLIC_KEY` secret and the `ZENO_LICENSE_SERVER` variable, and attaches the zip to the GitHub release. Customers run `ZenoSetup.exe` first (`setup_wizard.py`): it checks the key, finds their report chat, and writes `.env`.
+
+---
+
 ## Admin Panel
 
 Run `python admin_panel.py` to manage users.
