@@ -132,6 +132,8 @@ Run `python admin_panel.py` to manage users.
 
 Users are stored in `users.db` (SQLite), not `accounts.json`.
 
+MT5 passwords are encrypted in `users.db`. The key is taken from the `TELETRADER_SECRET_KEY` environment variable, or from `secret.key` (created on first run; override the path with `TELETRADER_KEY_FILE`). Existing plain-text passwords are encrypted automatically the next time the bot or admin panel starts. Back up the key separately from the database: without it the stored passwords cannot be decrypted, and anyone holding both can read them.
+
 ---
 
 ## Copy-Trading

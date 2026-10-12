@@ -9,6 +9,8 @@ from pathlib import Path
 
 from loguru import logger
 
+from tradebot.infrastructure import credential_vault
+
 DB_PATH = Path("users.db")
 
 _SCHEMA = """\
@@ -130,7 +132,21 @@ def init_db(db_path: str | Path | None = None) -> None:
                 con.commit()
             except sqlite3.OperationalError:
                 pass  # column already exists
+        _encrypt_legacy_passwords(con)
     logger.info(f"Database ready at {db_path or DB_PATH}")
+
+
+def _encrypt_legacy_passwords(con: sqlite3.Connection) -> None:
+    """Encrypt any MT5 passwords still stored in plain text."""
+    rows = con.execute("SELECT id, mt5_password FROM users").fetchall()
+    legacy = [r for r in rows
+              if r["mt5_password"] and not credential_vault.is_encrypted(r["mt5_password"])]
+    for r in legacy:
+        con.execute("UPDATE users SET mt5_password=? WHERE id=?",
+                    (credential_vault.encrypt(r["mt5_password"]), r["id"]))
+    if legacy:
+        con.commit()
+        logger.info(f"Encrypted {len(legacy)} plain-text MT5 password(s)")
 
 
 # ------------------------------------------------------------------
@@ -152,7 +168,7 @@ def _to_user(row: sqlite3.Row) -> UserAccount:
         last_name=row["last_name"],
         phone=row["phone"] or "",
         mt5_account=row["mt5_account"],
-        mt5_password=row["mt5_password"],
+        mt5_password=credential_vault.decrypt(row["mt5_password"]),
         mt5_server=row["mt5_server"],
         mt5_path=row["mt5_path"],
         risk_mode=row["risk_mode"] or "risk_pct",
@@ -193,7 +209,7 @@ def add_user(u: UserAccount, db_path: str | Path | None = None) -> int:
                 created_at,updated_at)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (u.first_name, u.last_name, u.phone,
-             u.mt5_account, u.mt5_password, u.mt5_server, u.mt5_path,
+             u.mt5_account, credential_vault.encrypt(u.mt5_password), u.mt5_server, u.mt5_path,
              u.risk_mode, u.risk_per_trade, u.fixed_lot, u.max_slippage,
              int(u.enabled), int(u.is_master), int(u.pending_expire_minutes),
              int(u.be_enabled), float(u.be_trigger_pct), int(u.be_cushion_points),
@@ -219,7 +235,7 @@ def update_user(u: UserAccount, db_path: str | Path | None = None) -> None:
                updated_at=?
                WHERE id=?""",
             (u.first_name, u.last_name, u.phone,
-             u.mt5_account, u.mt5_password, u.mt5_server, u.mt5_path,
+             u.mt5_account, credential_vault.encrypt(u.mt5_password), u.mt5_server, u.mt5_path,
              u.risk_mode, u.risk_per_trade, u.fixed_lot, u.max_slippage,
              int(u.enabled), int(u.is_master), int(u.pending_expire_minutes),
              int(u.be_enabled), float(u.be_trigger_pct), int(u.be_cushion_points),

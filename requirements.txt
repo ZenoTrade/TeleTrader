@@ -1,3 +1,4 @@
+cryptography
 loguru
 MetaTrader5
 pandas
