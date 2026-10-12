@@ -116,6 +116,23 @@ Post a formatted signal in your Telegram channel. The bot will parse it and exec
 
 ---
 
+## Zeno licensing
+
+Customer builds of the Copier need a Zeno license. Owner builds (no public key set) run without one.
+
+```ini
+ZENO_LICENSE_KEY=ZENO-...            # from the Zeno bot: /key
+ZENO_LICENSE_SERVER=https://api.<zeno domain>
+SIGNAL_SOURCE=zeno                   # poll Zeno Signals instead of SIGNAL_CHAT_ID
+```
+
+- The release build sets `EMBEDDED_PUBLIC_KEY` in `tradebot/infrastructure/license_guard.py` to the license server's public key (`python -m zeno_license.cli keygen` prints it). `ZENO_LICENSE_PUBLIC_KEY` does the same for testing.
+- At startup every enabled account is checked against the license; the plan's account limit applies. The check repeats every 6 hours, and the last good check covers 72 hours of server downtime.
+- With an inactive license, new signals are ignored and the reason is posted to `SIGNAL_CHAT_ID`. Open positions and the SL manager keep running.
+- With `SIGNAL_SOURCE=zeno`, signals come from the Zeno feed (bundle or signals plans). `SIGNAL_CHAT_ID` is then only used for execution reports, and the trader allowlist is skipped because Zeno curates the feed.
+
+---
+
 ## Admin Panel
 
 Run `python admin_panel.py` to manage users.

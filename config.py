@@ -29,9 +29,17 @@ class Settings(BaseSettings):
     magic_number: int        = Field(32001)
     db_path: str             = Field("users.db")
 
+    # Zeno licensing (customer builds). See tradebot/infrastructure/license_guard.py
+    zeno_license_key: str    = Field("", alias="ZENO_LICENSE_KEY")
+    zeno_license_server: str = Field("https://api.zenotrade.example", alias="ZENO_LICENSE_SERVER")
+    zeno_license_public_key: str = Field("", alias="ZENO_LICENSE_PUBLIC_KEY")
+    # "telegram": read SIGNAL_CHAT_ID; "zeno": poll the Zeno signals feed.
+    signal_source: str       = Field("telegram", alias="SIGNAL_SOURCE")
+
     model_config = SettingsConfigDict(
         env_file = ".env",
-        extra    = "ignore"
+        extra    = "ignore",
+        populate_by_name = True
     )
 
 

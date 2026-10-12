@@ -41,6 +41,7 @@ from tradebot.infrastructure.copy_syncer import CopyTradeSyncer
 from tradebot.infrastructure.pending_expirer import PendingOrderExpirer
 from tradebot.infrastructure.db import init_db, get_enabled_users, get_master_user
 from tradebot.infrastructure._mt5_utils import ensure_mt5
+from tradebot.infrastructure import license_guard as lg
 
 
 def bootstrap():
@@ -110,6 +111,17 @@ def bootstrap():
         logger.error("No accounts could log in. Fix credentials and retry.")
         sys.exit(2)
 
+    guard = lg.LicenseGuard(
+        settings.zeno_license_key, settings.zeno_license_server,
+        lg.EMBEDDED_PUBLIC_KEY or settings.zeno_license_public_key)
+    if guard.enabled:
+        state = guard.check([u.mt5_account for u in users])
+        if not state.active:
+            logger.error(f"Zeno license check failed: {state.reason}. "
+                         "Set ZENO_LICENSE_KEY in .env (get it from the Zeno bot with /key).")
+            sys.exit(3)
+        logger.info(f"Zeno license active until {state.expires_at} ({', '.join(state.products)})")
+
     master = get_master_user()
     if not master:
         logger.warning(
@@ -154,6 +166,8 @@ def bootstrap():
         pending_expirer=pending_expirer,
         startup_message=startup_msg,
         shutdown_message=shutdown_msg,
+        license_guard=guard if guard.enabled else None,
+        zeno_feed_url=settings.zeno_license_server if settings.signal_source == "zeno" else "",
     )
     gateway.run()
 

@@ -1,9 +1,10 @@
-cryptography
-loguru
 MetaTrader5
+cryptography
+httpx
+loguru
 pandas
 psutil
 pydantic
 pydantic-settings
-python-telegram-bot
 pytest
+python-telegram-bot
