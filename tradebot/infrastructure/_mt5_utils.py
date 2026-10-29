@@ -2,7 +2,12 @@
 import MetaTrader5 as mt5
 from loguru import logger
 import os
+import threading
 import time
+
+# One MetaTrader5 module serves every thread, and login() switches the
+# account for all of them. Hold this lock for each login-and-act sequence.
+MT5_LOCK = threading.RLock()
 
 def ensure_mt5(path: str | None = None):
     """

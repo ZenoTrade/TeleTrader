@@ -48,8 +48,35 @@ def products_in_key(key: str, public_key: str) -> list[str]:
     return list(lg.verify_offline(key, public_key).get("prd", []))
 
 
+# Common prop-firm rule sets. Customers can fine-tune GUARD_* in .env afterwards.
+GUARD_PRESETS: dict[str, dict[str, str] | None] = {
+    "Off": None,
+    "Two-step challenge (5% daily, 10% max)": {
+        "GUARD_DAILY_LOSS_PCT": "5", "GUARD_MAX_DRAWDOWN_PCT": "10",
+        "GUARD_TRAILING_DRAWDOWN": "false"},
+    "One-step challenge (4% daily, 6% trailing)": {
+        "GUARD_DAILY_LOSS_PCT": "4", "GUARD_MAX_DRAWDOWN_PCT": "6",
+        "GUARD_TRAILING_DRAWDOWN": "true"},
+    "Funded account (5% daily, 10% max)": {
+        "GUARD_DAILY_LOSS_PCT": "5", "GUARD_MAX_DRAWDOWN_PCT": "10",
+        "GUARD_TRAILING_DRAWDOWN": "false"},
+}
+
+
+def guard_env(preset: str, initial_balance: float) -> dict[str, str]:
+    """The GUARD_* lines for a preset; Off writes GUARD_ENABLED=false only."""
+    rules = GUARD_PRESETS[preset]
+    if rules is None:
+        return {"GUARD_ENABLED": "false"}
+    if initial_balance <= 0:
+        raise ValueError("starting balance must be above zero")
+    return {"GUARD_ENABLED": "true", **rules,
+            "GUARD_INITIAL_BALANCE": f"{initial_balance:g}"}
+
+
 def render_env(*, license_key: str, server: str, bot_token: str, chat_id: int,
-               signal_source: str, risk_per_trade: float, existing: str = "") -> str:
+               signal_source: str, risk_per_trade: float, existing: str = "",
+               extra: dict[str, str] | None = None) -> str:
     """Write our keys into an .env, keeping any other lines the customer added."""
     values = {
         "ZENO_LICENSE_KEY": license_key.strip(),
@@ -58,6 +85,7 @@ def render_env(*, license_key: str, server: str, bot_token: str, chat_id: int,
         "SIGNAL_CHAT_ID": str(chat_id),
         "SIGNAL_SOURCE": signal_source,
         "RISK_PER_TRADE": f"{risk_per_trade:g}",
+        **(extra or {}),
     }
     kept = [line for line in existing.splitlines()
             if line.split("=", 1)[0].strip() not in values]
@@ -100,12 +128,26 @@ class Wizard(tk.Tk):
         self.risk.set("1.0")
         self.risk.grid(row=6, column=1, sticky="w", **pad)
 
+        ttk.Label(self, text="4. Zeno Guard (prop-firm rules)",
+                  font=("Segoe UI", 10, "bold")).grid(row=7, column=0, sticky="w", **pad)
+        self.guard_preset = ttk.Combobox(self, values=list(GUARD_PRESETS), state="readonly", width=42)
+        self.guard_preset.set("Off")
+        self.guard_preset.grid(row=7, column=1, sticky="w", **pad)
+        ttk.Label(self, text="Account starting balance").grid(row=8, column=0, sticky="w", **pad)
+        self.guard_balance = ttk.Entry(self, width=14)
+        self.guard_balance.grid(row=8, column=1, sticky="w", **pad)
+        ttk.Label(self, wraplength=520, justify="left", text=(
+            "Guard closes every trade and locks the account for the day before your "
+            "firm's daily loss or max drawdown limit is reached, and blocks new trades "
+            "whose stop would cross it. Needs a license that includes Guard.")).grid(
+            row=9, column=0, columnspan=2, sticky="w", **pad)
+
         ttk.Label(self, wraplength=520, foreground="#a33", justify="left", text=(
             "Trading is risky. Start on a demo account or with low risk until you have "
-            "seen how the Copier behaves.")).grid(row=7, column=0, columnspan=2, sticky="w", **pad)
+            "seen how the Copier behaves.")).grid(row=10, column=0, columnspan=2, sticky="w", **pad)
 
         ttk.Button(self, text="Save and add my MT5 account", command=self.save).grid(
-            row=8, column=0, columnspan=2, sticky="e", **pad)
+            row=11, column=0, columnspan=2, sticky="e", **pad)
         self.chat_id: int | None = None
 
     def find_chat(self) -> None:
@@ -143,11 +185,18 @@ class Wizard(tk.Tk):
         except ValueError:
             messagebox.showerror("Zeno", "Risk must be a number like 1.0")
             return
+        try:
+            balance_text = self.guard_balance.get().replace(",", "").strip()
+            guard = guard_env(self.guard_preset.get(), float(balance_text or 0))
+        except ValueError:
+            messagebox.showerror("Zeno", "Enter the account's starting balance, like 100000.")
+            return
         source = "zeno" if "signals" in products else "telegram"
         existing = ENV_PATH.read_text() if ENV_PATH.exists() else ""
         ENV_PATH.write_text(render_env(
             license_key=key, server=DEFAULT_SERVER, bot_token=self.token.get(),
-            chat_id=self.chat_id, signal_source=source, risk_per_trade=risk, existing=existing))
+            chat_id=self.chat_id, signal_source=source, risk_per_trade=risk, existing=existing,
+            extra=guard))
         note = ("Zeno Signals will be executed automatically."
                 if source == "zeno" else
                 "Set SIGNAL_CHAT_ID in .env to the channel you want to copy, and add your bot to it.")

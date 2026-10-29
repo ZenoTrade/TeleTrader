@@ -44,6 +44,21 @@ class Settings(BaseSettings):
     llm_base_url: str        = Field("https://api.openai.com/v1", alias="LLM_BASE_URL")
     llm_min_confidence: float = Field(0.7, ge=0, le=1, alias="LLM_MIN_CONFIDENCE")
 
+    # Zeno Guard: prop-firm rule enforcement. See tradebot/domain/guard.py
+    guard_enabled: bool      = Field(False, alias="GUARD_ENABLED")
+    guard_daily_loss_pct: float = Field(5.0, gt=0, alias="GUARD_DAILY_LOSS_PCT")
+    guard_max_drawdown_pct: float = Field(10.0, gt=0, alias="GUARD_MAX_DRAWDOWN_PCT")
+    guard_trailing_drawdown: bool = Field(False, alias="GUARD_TRAILING_DRAWDOWN")
+    guard_buffer_pct: float  = Field(1.0, ge=0, alias="GUARD_BUFFER_PCT")
+    guard_max_risk_per_trade_pct: float = Field(1.0, gt=0, alias="GUARD_MAX_RISK_PER_TRADE_PCT")
+    guard_max_open_positions: int = Field(0, ge=0, alias="GUARD_MAX_OPEN_POSITIONS")
+    guard_require_stop_loss: bool = Field(True, alias="GUARD_REQUIRE_STOP_LOSS")
+    guard_profit_target_pct: float = Field(0.0, ge=0, alias="GUARD_PROFIT_TARGET_PCT")
+    # Starting balance of the challenge; 0 = the balance when Guard first sees the account.
+    guard_initial_balance: float = Field(0.0, ge=0, alias="GUARD_INITIAL_BALANCE")
+    # Most prop firms start the trading day at midnight in this zone.
+    guard_reset_tz: str      = Field("Europe/Prague", alias="GUARD_RESET_TZ")
+
     model_config = SettingsConfigDict(
         env_file = ".env",
         extra    = "ignore",

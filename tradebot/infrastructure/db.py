@@ -52,6 +52,17 @@ CREATE TABLE IF NOT EXISTS traders (
     last_seen   TEXT
 );
 
+CREATE TABLE IF NOT EXISTS guard_state (
+    account           INTEGER PRIMARY KEY,
+    initial_balance   REAL    NOT NULL,
+    day               TEXT    NOT NULL,
+    day_start_balance REAL    NOT NULL,
+    high_balance      REAL    NOT NULL,
+    locked_until      TEXT    DEFAULT '',
+    lock_reason       TEXT    DEFAULT '',
+    updated_at        TEXT
+);
+
 CREATE TABLE IF NOT EXISTS bot_pending_placed (
     account    INTEGER NOT NULL,
     ticket     INTEGER NOT NULL,
@@ -492,4 +503,51 @@ def delete_bot_pending_placed(
             "DELETE FROM bot_pending_placed WHERE account=? AND ticket=?",
             (int(account), int(ticket)),
         )
+        con.commit()
+
+
+# ------------------------------------------------------------------
+# Zeno Guard state (one row per guarded account)
+# ------------------------------------------------------------------
+
+def get_guard_state(account: int, db_path: str | Path | None = None):
+    from tradebot.domain.guard import GuardState
+
+    with _conn(db_path) as con:
+        row = con.execute(
+            "SELECT * FROM guard_state WHERE account=?", (int(account),)
+        ).fetchone()
+    if not row:
+        return None
+    return GuardState(
+        initial_balance=row["initial_balance"],
+        day=row["day"],
+        day_start_balance=row["day_start_balance"],
+        high_balance=row["high_balance"],
+        locked_until=row["locked_until"] or "",
+        lock_reason=row["lock_reason"] or "",
+    )
+
+
+def save_guard_state(account: int, state, db_path: str | Path | None = None) -> None:
+    with _conn(db_path) as con:
+        con.execute(
+            """INSERT INTO guard_state (account, initial_balance, day, day_start_balance,
+                                        high_balance, locked_until, lock_reason, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(account) DO UPDATE SET
+                 initial_balance=excluded.initial_balance, day=excluded.day,
+                 day_start_balance=excluded.day_start_balance,
+                 high_balance=excluded.high_balance, locked_until=excluded.locked_until,
+                 lock_reason=excluded.lock_reason, updated_at=excluded.updated_at""",
+            (int(account), state.initial_balance, state.day, state.day_start_balance,
+             state.high_balance, state.locked_until, state.lock_reason,
+             datetime.now(timezone.utc).isoformat()),
+        )
+        con.commit()
+
+
+def delete_guard_state(account: int, db_path: str | Path | None = None) -> None:
+    with _conn(db_path) as con:
+        con.execute("DELETE FROM guard_state WHERE account=?", (int(account),))
         con.commit()

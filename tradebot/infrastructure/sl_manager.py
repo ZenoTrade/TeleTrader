@@ -10,7 +10,7 @@ from loguru import logger
 
 from config import settings
 from .db import get_enabled_users, get_master_user
-from ._mt5_utils import ensure_mt5
+from ._mt5_utils import MT5_LOCK, ensure_mt5
 from .stop_manager import StopManager
 
 
@@ -73,7 +73,8 @@ class SignalSLManager:
     def _loop(self) -> None:
         while not self._stop_event.is_set():
             try:
-                self.run_once()
+                with MT5_LOCK:
+                    self.run_once()
             except Exception as exc:
                 logger.error(f"SL manager loop error: {exc}")
             self._stop_event.wait(self.interval_sec)

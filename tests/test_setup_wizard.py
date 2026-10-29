@@ -47,3 +47,23 @@ def test_products_in_key():
     assert sw.products_in_key(key, "") == []
     with pytest.raises(ValueError):
         sw.products_in_key("ZENO-bad.key", pub)
+
+
+def test_guard_env_presets():
+    assert sw.guard_env("Off", 0) == {"GUARD_ENABLED": "false"}
+    env = sw.guard_env("One-step challenge (4% daily, 6% trailing)", 50_000)
+    assert env["GUARD_ENABLED"] == "true"
+    assert env["GUARD_TRAILING_DRAWDOWN"] == "true"
+    assert env["GUARD_INITIAL_BALANCE"] == "50000"
+    with pytest.raises(ValueError):
+        sw.guard_env("Two-step challenge (5% daily, 10% max)", 0)
+
+
+def test_render_env_writes_guard_lines():
+    out = sw.render_env(license_key="k", server="s", bot_token="t", chat_id=1,
+                        signal_source="telegram", risk_per_trade=0.01,
+                        existing="GUARD_ENABLED=false\n",
+                        extra=sw.guard_env("Two-step challenge (5% daily, 10% max)", 100_000))
+    lines = out.splitlines()
+    assert "GUARD_ENABLED=true" in lines and "GUARD_ENABLED=false" not in lines
+    assert "GUARD_DAILY_LOSS_PCT=5" in lines

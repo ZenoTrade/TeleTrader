@@ -15,7 +15,7 @@ from .db import (
     get_bot_pending_placed_at,
     get_enabled_users,
 )
-from ._mt5_utils import ensure_mt5
+from ._mt5_utils import MT5_LOCK, ensure_mt5
 
 # Bot pending orders are tagged so we never cancel manual pendings.
 BOT_PENDING_COMMENT_PREFIX = "TT|"
@@ -122,7 +122,8 @@ class PendingOrderExpirer:
     def _loop(self) -> None:
         while not self._stop.is_set():
             try:
-                self.run_once()
+                with MT5_LOCK:
+                    self.run_once()
             except Exception as exc:
                 logger.error(f"Pending expirer loop error: {exc}")
             self._stop.wait(self.interval_sec)

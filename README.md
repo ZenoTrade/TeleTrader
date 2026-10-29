@@ -224,6 +224,44 @@ Stoploss : 1.1020
 @Alice
 ```
 
+### Other formats (LLM fallback)
+
+Channels that write signals their own way can be copied too. Set `LLM_API_KEY`
+(and optionally `LLM_MODEL`, `LLM_BASE_URL` for any OpenAI-compatible API such as
+DeepSeek or a local server). When the exact parser above can't read a message that
+mentions buy/sell and a price, the LLM reads it and returns JSON. A signal is only
+traded if it has a symbol, side, entry, stop loss and at least one target on the
+right sides of entry, and the model's confidence is at least `LLM_MIN_CONFIDENCE`
+(default 0.7). Set `REQUIRE_TRADER_TAG=false` to copy channels that don't tag a trader.
+
+---
+
+## Zeno Guard (prop-firm rules)
+
+Guard keeps a prop-firm account from failing its rules. Turn it on with
+`GUARD_ENABLED=true` (the setup wizard has presets) and a license that includes Guard.
+
+Every 2 seconds, for every enabled account, it:
+
+- tracks the trading day's starting balance (day resets at midnight in `GUARD_RESET_TZ`, default `Europe/Prague`) and the balance high;
+- computes the floor: the higher of the daily loss floor (day-start balance minus `GUARD_DAILY_LOSS_PCT` of the initial balance) and the max drawdown floor (initial balance, or the balance high when `GUARD_TRAILING_DRAWDOWN=true`, minus `GUARD_MAX_DRAWDOWN_PCT`);
+- acts `GUARD_BUFFER_PCT` (default 1%) above that floor: when equity reaches it, Guard closes every position, deletes every pending order, and locks the account until the next trading day.
+
+Before any order is sent, by the bot or by the copy syncer, Guard refuses it when:
+
+- it has no stop loss (`GUARD_REQUIRE_STOP_LOSS=true`);
+- its loss to stop is above `GUARD_MAX_RISK_PER_TRADE_PCT` of the initial balance;
+- equity minus the loss to stop of every open position and pending order, minus this order, would be at or below the guard line;
+- the account is locked, or has `GUARD_MAX_OPEN_POSITIONS` open.
+
+`GUARD_PROFIT_TARGET_PCT` (off by default) closes everything and stops trading once a challenge target is reached.
+Set `GUARD_INITIAL_BALANCE` to the challenge's starting balance; otherwise Guard uses the balance when it first sees the account.
+Guard state lives in the `guard_state` table of `users.db`; delete an account's row to reset it.
+
+Guard reduces the risk of breaking a rule; it can't remove it. Gaps, slippage and
+weekend opens can move equity past the buffer before a close fills, so keep the
+buffer at least as large as one bad fill.
+
 ---
 
 ## Risk Management
@@ -263,8 +301,10 @@ TeleTrader/
     domain/
       models.py           # Signal, Order, Target, OrderResult
       ports.py            # Abstract interfaces
+      guard.py            # Zeno Guard rules (pure)
     application/
       parser.py           # Signal text parser
+      llm_parser.py       # LLM fallback parser for free-form signals
       order_generator.py  # Signal -> Orders
       risk.py             # Risk managers (Simple, Fibonacci)
     infrastructure/
@@ -272,6 +312,7 @@ TeleTrader/
       mt5_engine.py       # MT5 order execution
       sl_manager.py       # Auto SL-to-TP1 manager
       copy_syncer.py      # Copy-trade synchronizer
+      prop_guard.py       # Zeno Guard monitor + pre-trade checks on MT5
       telegram_listener.py
       telegram_notifier.py
       _mt5_utils.py       # MT5 init/login helpers

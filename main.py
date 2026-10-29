@@ -44,6 +44,8 @@ from tradebot.infrastructure.pending_expirer import PendingOrderExpirer
 from tradebot.infrastructure.db import init_db, get_enabled_users, get_master_user
 from tradebot.infrastructure._mt5_utils import ensure_mt5
 from tradebot.infrastructure import license_guard as lg
+from tradebot.infrastructure.prop_guard import PropGuard, rules_from_settings
+from tradebot.infrastructure.telegram_notifier import notify_from_thread
 
 
 def bootstrap():
@@ -130,6 +132,22 @@ def bootstrap():
             sys.exit(3)
         logger.info(f"Zeno license active until {state.expires_at} ({', '.join(state.products)})")
 
+    prop_guard = None
+    if settings.guard_enabled:
+        prop_guard = PropGuard(
+            rules_from_settings(),
+            tz=settings.guard_reset_tz,
+            notify=lambda msg: notify_from_thread(
+                settings.telegram_token, settings.signal_chat_id, msg),
+            licensed=lambda: guard.has_product("risk_guard"),
+            initial_balance=settings.guard_initial_balance,
+            db_path=settings.db_path,
+        )
+        engine.guard = prop_guard
+        copy_syncer.guard = prop_guard
+        if not guard.has_product("risk_guard"):
+            logger.warning("GUARD_ENABLED is set but the license does not include Zeno Guard")
+
     master = get_master_user()
     if not master:
         logger.warning(
@@ -152,6 +170,7 @@ def bootstrap():
         f"{accounts_info}{fail_info}\n"
         f"🔄 Copy-Trade: {'Active' if master else 'Inactive'}\n"
         f"🛡️ SL Manager: Active\n"
+        f"🚧 Zeno Guard: {prop_guard.describe() if prop_guard else 'Off'}\n"
         f"⏱️ Pending expiry: per user (admin) — bot pendings only\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"✅ Listening for signals…"
@@ -175,6 +194,7 @@ def bootstrap():
         startup_message=startup_msg,
         shutdown_message=shutdown_msg,
         license_guard=guard if guard.enabled else None,
+        prop_guard=prop_guard,
         zeno_feed_url=settings.zeno_license_server if settings.signal_source == "zeno" else "",
     )
     gateway.run()

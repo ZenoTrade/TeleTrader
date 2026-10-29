@@ -39,6 +39,7 @@ class TelegramSignalListener:
             shutdown_message: str = "",
             license_guard: LicenseGuard | None = None,
             zeno_feed_url: str = "",
+            prop_guard=None,
     ):
         self.parser = parser
         self.engine = engine
@@ -50,6 +51,7 @@ class TelegramSignalListener:
         self._startup_msg = startup_message
         self._shutdown_msg = shutdown_message
         self.license_guard = license_guard
+        self.prop_guard = prop_guard
         self.feed = (ZenoSignalFeed(zeno_feed_url, license_guard.key, self._handle_feed_text)
                      if zeno_feed_url and license_guard else None)
 
@@ -197,9 +199,13 @@ class TelegramSignalListener:
             self.pending_expirer.start()
         if self.license_guard is not None:
             self.license_guard.start(on_change=self._on_license_change)
+        if self.prop_guard is not None:
+            self.prop_guard.start()
         try:
             self.app.run_polling(drop_pending_updates=True)
         finally:
+            if self.prop_guard is not None:
+                self.prop_guard.stop()
             if self.feed is not None:
                 self.feed.stop()
             if self.license_guard is not None:

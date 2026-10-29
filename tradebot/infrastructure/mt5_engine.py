@@ -17,7 +17,7 @@ from .db import (
     record_bot_pending_placed,
     UserAccount,
 )
-from ._mt5_utils import ensure_mt5
+from ._mt5_utils import MT5_LOCK, ensure_mt5
 from .pending_expirer import (
     BOT_PENDING_COMMENT_PREFIX,
     MT5_ORDER_COMMENT_MAX_LEN,
@@ -25,8 +25,9 @@ from .pending_expirer import (
 
 
 class MetaTraderEngine(TradingEnginePort):
-    def __init__(self):
-        pass
+    def __init__(self, guard=None):
+        # Optional PropGuard; when set, every order passes guard.pre_trade().
+        self.guard = guard
 
     # ------------------------------------------------------------------
     def execute_order(self, order: Order) -> list[OrderResult]:
@@ -34,6 +35,10 @@ class MetaTraderEngine(TradingEnginePort):
 
         If no master is configured, falls back to executing on all enabled users.
         """
+        with MT5_LOCK:
+            return self._execute_order(order)
+
+    def _execute_order(self, order: Order) -> list[OrderResult]:
         master = get_master_user()
         users = [master] if master else get_enabled_users()
         results: list[OrderResult] = []
@@ -117,6 +122,13 @@ class MetaTraderEngine(TradingEnginePort):
             else:
                 mt5_type = mt5.ORDER_TYPE_SELL
                 price    = bid
+
+        if self.guard is not None:
+            ok, reason = self.guard.pre_trade(
+                user, symbol_mt, order.side, volume, price, order.sl)
+            if not ok:
+                return OrderResult(False, f"Guard: {reason}",
+                                   data={"account_id": user.mt5_account})
 
         raw_c = (order.comment or "").strip()
         if action == mt5.TRADE_ACTION_PENDING:

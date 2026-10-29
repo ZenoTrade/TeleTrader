@@ -15,7 +15,7 @@ import MetaTrader5 as mt5
 from loguru import logger
 
 from config import settings
-from ._mt5_utils import ensure_mt5
+from ._mt5_utils import MT5_LOCK, ensure_mt5
 from .db import (
     get_master_user,
     get_follower_users,
@@ -44,8 +44,9 @@ class _PosSnap:
 class CopyTradeSyncer:
     """Background thread that keeps follower accounts in sync with master."""
 
-    def __init__(self, interval_sec: int = 5):
+    def __init__(self, interval_sec: int = 5, guard=None):
         self.interval_sec = interval_sec
+        self.guard = guard
         self._stop = threading.Event()
         self._worker: threading.Thread | None = None
         self._prev: Dict[int, _PosSnap] = {}
@@ -72,7 +73,8 @@ class CopyTradeSyncer:
     def _loop(self) -> None:
         while not self._stop.is_set():
             try:
-                self._tick()
+                with MT5_LOCK:
+                    self._tick()
             except Exception as exc:
                 logger.error(f"CopyTradeSyncer error: {exc}")
             self._stop.wait(self.interval_sec)
@@ -169,6 +171,16 @@ class CopyTradeSyncer:
             if not tick:
                 logger.warning(f"CopySyncer: no tick for {snap.symbol}")
                 return
+
+            price = tick.ask if side_buy else tick.bid
+            if self.guard is not None:
+                ok, reason = self.guard.pre_trade(
+                    follower, snap.symbol, "buy" if side_buy else "sell",
+                    volume, price, snap.sl or None)
+                if not ok:
+                    logger.warning(
+                        f"CopySyncer: Guard blocked copy to {follower.mt5_account}: {reason}")
+                    return
 
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
