@@ -102,7 +102,7 @@ class TelegramSignalListener:
                 if not is_trader_allowed(trader_name):
                     logger.info(f"Signal from trader '{trader_name}' — not enabled, skipping")
                     return []
-            else:
+            elif settings.require_trader_tag:
                 logger.info("Signal has no Trader tag — skipping")
                 return []
 

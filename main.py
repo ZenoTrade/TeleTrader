@@ -31,6 +31,8 @@ def _kill_zombie_bots() -> None:
 
 from config import settings
 from tradebot.application.parser import BasicSignalParser
+from tradebot.application.llm_parser import (
+    HybridSignalParser, LlmSignalParser, OpenAiCompatibleClient)
 from tradebot.application.order_generator import SimpleOrderGenerator
 from tradebot.application.risk import FiboRiskManager
 from tradebot.infrastructure.mt5_engine import MetaTraderEngine
@@ -54,6 +56,12 @@ def bootstrap():
     init_db(settings.db_path)
 
     parser           = BasicSignalParser()
+    if settings.llm_api_key:
+        llm = OpenAiCompatibleClient(settings.llm_api_key, settings.llm_model,
+                                     settings.llm_base_url)
+        parser = HybridSignalParser(
+            parser, LlmSignalParser(llm, settings.llm_min_confidence))
+        logger.info(f"LLM fallback parser on ({settings.llm_model})")
     engine           = MetaTraderEngine()
     risk_manager     = FiboRiskManager(reverse=True)
     order_generator  = SimpleOrderGenerator(risk_manager=risk_manager)

@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     zeno_license_public_key: str = Field("", alias="ZENO_LICENSE_PUBLIC_KEY")
     # "telegram": read SIGNAL_CHAT_ID; "zeno": poll the Zeno signals feed.
     signal_source: str       = Field("telegram", alias="SIGNAL_SOURCE")
+    # Signals without an "@... Trader:Name" tag are skipped unless this is off.
+    require_trader_tag: bool = Field(True, alias="REQUIRE_TRADER_TAG")
+
+    # Optional LLM fallback for channels that don't use the Zeno format.
+    llm_api_key: str         = Field("", alias="LLM_API_KEY")
+    llm_model: str           = Field("gpt-4o-mini", alias="LLM_MODEL")
+    llm_base_url: str        = Field("https://api.openai.com/v1", alias="LLM_BASE_URL")
+    llm_min_confidence: float = Field(0.7, ge=0, le=1, alias="LLM_MIN_CONFIDENCE")
 
     model_config = SettingsConfigDict(
         env_file = ".env",
